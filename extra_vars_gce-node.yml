@@ -1,0 +1,17 @@
+---
+zone: us-central1-a
+machine_type: n1-standard-4
+image: ocp-39-base
+disk_size: 50
+ssh_user: root
+ocpuser: ocpuser
+ocppass: Redhat1!
+domain: google.internal
+ansible_user_dir: /root
+rhn_user: youruser
+rhn_pass: yourpassword
+rhn_pool: your_pool_id
+cf_db_dev: /dev/sdb
+master1: 35.226.1.167
+vm_name: ocp-node-n
+count: 1

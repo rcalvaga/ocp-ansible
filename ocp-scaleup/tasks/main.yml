@@ -1,0 +1,87 @@
+---
+#  - name: Register with Red Hat Subscription Manager
+#    command: subscription-manager register --username={{ rhn_user }} --password={{ rhn_pass }} --force
+
+#  - name: Attach subscription
+#    command: subscription-manager attach --pool="{{ rhn_pool }}"
+
+#  - name: Disable all repos
+#    command: subscription-manager repos --disable "*"
+
+#  - name: Enable necessary repos
+#    command: subscription-manager repos --enable="rhel-7-server-rpms"     --enable="rhel-7-server-extras-rpms"     --enable="rhel-7-server-ose-3.9-rpms"     --enable="rhel-7-fast-datapath-rpms" --enable="rhel-7-server-ansible-2.4-rpms
+
+#  - name: Install necessary packages
+#    yum:  
+#      name: '{{ item }}'
+#      state: present
+#    with_items: 
+#    - wget
+#    - git
+#    - net-tools
+#    - bind-utils
+#    - iptables-services
+#    - bridge-utils
+#    - bash-completion
+#    - kexec-tools
+#    - sos
+#    - psacct
+#    - docker-1.13.1
+#    - httpd-tools
+#    - atomic-openshift-utils
+
+  - name: configure docker storage
+    template:
+      src: docker-storage-setup.j2
+      dest: /etc/sysconfig/docker-storage-setup
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: start and enable Docker
+    service:
+      name: docker
+      state: started
+      enabled: true
+ 
+  - name: capture master public key
+    shell: "cat {{ ansible_user_dir }}/.ssh/id_rsa.pub"
+    when: "'master' in group_names"
+    register: pubkey
+
+  - debug:
+      var: pubkey.stdout_lines
+    when: "'master' in group_names"
+
+  - name: set the pubkey fact on the master
+    set_fact:
+      masterpubkey: "{{ pubkey.stdout }}"
+    when: "'master' in group_names"
+
+  - name: restart dbus
+    service:
+      name: dbus
+      state: restarted
+    when: "'node' in group_names"
+
+  - name: Set domain in resolve search list
+    lineinfile:
+      path: /etc/resolv.conf
+      regexp: '^search'
+      line: 'search {{ domain }}'
+      owner: root
+      group: root
+      mode: 0644
+    when: "'node' in group_names"
+
+  - name: add key to authorized keys
+    authorized_key:
+      user: "{{ ssh_user }}"
+      state: present
+      key: "{{ hostvars[groups['master'][0]]['masterpubkey']  }}"
+    when: "'node' in group_names"
+
+  - name: Add node to cluster
+    command: ansible-playbook -i /etc/ansible/hosts -e 'host_key_checking=False' /usr/share/ansible/openshift-ansible/playbooks/openshift-node/scaleup.yml
+    when: "'master' in group_names"
+    ignore_errors: True

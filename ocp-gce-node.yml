@@ -1,0 +1,56 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  remote_user: root
+  vars:
+    type: node
+    master: false
+    infra: false
+    node: true
+
+  vars_files:
+    - extra_vars_gce-node.yml
+
+  roles:
+    - {role: 'ocp-gce'}
+
+  tasks: 
+    - name: add master server to inventory
+      add_host:
+        hostname: "{{ master1 }}"
+        groupname: master
+
+- hosts: master
+  remote_user: rcalvaga
+  become: true
+  gather_facts: no
+
+  vars_files:
+    - extra_vars_gce-node.yml
+
+  tasks:
+    - name: add newnodes line
+      lineinfile:
+        dest: /etc/ansible/hosts
+        state: present
+        insertafter: '^nodes'
+        line: 'new_nodes'
+
+    - name: add newnodes block
+      blockinfile:
+        insertafter: EOF
+        path: /etc/ansible/hosts
+        content: |
+          [new_nodes]
+          ocp-node-n-000.c.cf-and-ansible-workshops.internal  openshift_node_labels="{'region': 'primary', 'zone': 'default'}"        
+
+- hosts: '!localhost'
+  remote_user: rcalvaga
+  become: true
+
+  vars_files:
+    - extra_vars_gce-node.yml
+
+  roles:
+    - {role: 'ocp-scaleup'}

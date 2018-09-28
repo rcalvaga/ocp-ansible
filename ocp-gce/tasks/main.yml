@@ -1,0 +1,60 @@
+---
+# tasks file for ocp-gce
+
+  - name: create the Instance
+    gce:
+      num_instances: "{{ count }}" 
+      name: "{{ vm_name }}"
+      zone: "{{ zone }}"
+      machine_type: "{{ machine_type }}"
+      image: "{{ image }}"
+      state: present
+      preemptible: false
+      disk_size: "{{ disk_size }}"
+      tags: http-server,https-server,ocp-ports
+    register: gce
+
+  - name: Debugging instance info
+    debug: var=gce.instance_data
+
+  - name: Add disk to Instance
+    gce_pd:
+      delete_on_termination: yes
+      instance_name: "{{ item.name }}"
+      mode: READ_WRITE
+      name: "vg-ocp-{{ item.name }}"
+      size_gb: "{{ disk_size }}"
+      state: present
+      zone: "{{ zone }}"
+    with_items: "{{ gce.instance_data }}"
+
+  - name: Wait for SSH to come up
+    wait_for: host={{ item.public_ip }} port=22 delay=10 timeout=60
+    with_items: "{{ gce.instance_data }}"
+
+  - name: Add master server to inventory
+    add_host:
+      hostname: "{{ item.public_ip }}"
+      #ansible_ssh_user: root
+      #ansible_ssh_pass: "{{ cf_ssh_pass }}"
+      groupname: master
+    with_items: "{{ gce.instance_data }}"
+    when: master
+
+  - name: add infra nodes to inventory
+    add_host:
+      hostname: "{{ item.public_ip }}"
+      #ansible_ssh_user: root
+      #ansible_ssh_pass: "{{ cf_ssh_pass }}"
+      groupname: node
+    with_items: "{{ gce.instance_data }}"
+    when: infra
+
+  - name: add nodes to inventory
+    add_host:
+      hostname: "{{ item.public_ip }}"
+      #ansible_ssh_user: root
+      #ansible_ssh_pass: "{{ cf_ssh_pass }}"
+      groupname: node
+    with_items: "{{ gce.instance_data }}"
+    when: node
